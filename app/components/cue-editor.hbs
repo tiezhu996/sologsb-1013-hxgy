@@ -197,6 +197,60 @@
         </div>
       </section>
 
+      <section class="assignment-panel paper-surface">
+        <div class="panel-heading">
+          <div><small>ASSIGNMENTS</small><h2>分工核对</h2></div>
+          <span class="assignment-total">{{this.assignmentRows.length}} 条</span>
+        </div>
+        <div class="assignment-tabs">
+          {{#each this.assignmentTabs as |tab|}}
+            <button type="button" class="assignment-tab {{if tab.active "is-active"}}" {{on "click" (fn this.setAssignmentKind tab.kind)}}>{{tab.label}}</button>
+          {{/each}}
+        </div>
+        {{#if this.assignmentOptions.length}}
+          <PaperSelect @label={{this.assignmentSelectLabel}} @options={{this.assignmentOptions}} @selected={{this.activeAssignmentKey}} @onChange={{this.selectAssignment}} class="assignment-select" />
+          <div class="assignment-list">
+            {{#each this.assignmentRows as |row|}}
+              <button type="button" class="assignment-row {{if row.overlapPrevious "has-overlap"}}" {{on "click" (fn this.inspectAssignmentCue row.sceneId row.cueId)}}>
+                <span class="assignment-row-head">
+                  <span class="assignment-scene">{{row.sceneLabel}}</span>
+                  <span class="assignment-kind">{{row.kind}}</span>
+                  <strong>{{row.title}}</strong>
+                </span>
+                <span class="assignment-row-meta">
+                  <span class="assignment-time">{{row.start}} – {{row.end}}</span>
+                  <small>{{row.interval}}</small>
+                </span>
+              </button>
+            {{else}}
+              <p class="empty-copy">{{this.activeAssignmentKey}} 当前没有排到的提示。</p>
+            {{/each}}
+          </div>
+          {{#if this.assignmentOverlaps.length}}
+            <div class="assignment-overlaps">
+              {{#each this.assignmentOverlaps as |item|}}
+                <div class="assignment-overlap-item">
+                  <span class="overlap-icon">⚠</span>
+                  <span>{{item.detail}}</span>
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
+          {{#if this.isOwnerAssignment}}
+            {{#if this.unassignedCues.length}}
+              <div class="assignment-unassigned">
+                <strong>负责人空缺 {{this.unassignedCues.length}} 条</strong>
+                {{#each this.unassignedCues as |item|}}
+                  <small>{{item.label}}</small>
+                {{/each}}
+              </div>
+            {{/if}}
+          {{/if}}
+        {{else}}
+          <p class="empty-copy">{{this.assignmentEmptyCopy}}</p>
+        {{/if}}
+      </section>
+
       <section class="version-panel paper-surface">
         <div class="panel-heading"><div><small>LOCKED VERSIONS</small><h2>版本比较</h2></div></div>
         {{#if this.versions.length}}

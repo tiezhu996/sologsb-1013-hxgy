@@ -8,6 +8,15 @@ const STORAGE_KEY = 'sologsb-1013-stage-cue-editor-v1';
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
+type AssignmentKind = 'owner' | 'prop' | 'cast';
+
+interface AssignmentEntry {
+  cue: Cue;
+  scene: Scene;
+  start: number;
+  end: number;
+}
+
 function cue(id: string, kind: CueKind, title: string, duration: number, owner: string, extra: Partial<Cue> = {}): Cue {
   return {
     id,
@@ -112,6 +121,14 @@ function overlaps(aStart: number, aDuration: number, bStart: number, bDuration: 
   return aStart < bStart + bDuration && bStart < aStart + aDuration;
 }
 
+function gapLabel(seconds: number): string {
+  const minute = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minute && rest) return `${minute} 分 ${rest} 秒`;
+  if (minute) return `${minute} 分`;
+  return `${rest} 秒`;
+}
+
 export default class CueEditorComponent extends Component {
   @tracked show: ShowData = loadShow();
   @tracked versions: VersionSnapshot[] = loadVersions();
@@ -121,6 +138,8 @@ export default class CueEditorComponent extends Component {
   @tracked compareVersionId = '';
   @tracked message = '';
   @tracked search = '';
+  @tracked assignmentKind: AssignmentKind = 'owner';
+  @tracked assignmentKey = '';
 
   private undoStack: ShowData[] = [];
   private redoStack: ShowData[] = [];
@@ -248,6 +267,135 @@ export default class CueEditorComponent extends Component {
   get filteredScenes() {
     const term = this.search.trim().toLowerCase();
     return this.sceneRows.filter((scene) => !term || `${scene.act}${scene.name}${scene.title}`.toLowerCase().includes(term));
+  }
+
+  get assignmentTabs(): Array<{
+    kind: AssignmentKind;
+    label: string;
+    active: boolean;
+  }> {
+    return [
+      {
+        kind: 'owner',
+        label: '负责人',
+        active: this.assignmentKind === 'owner',
+      },
+      { kind: 'prop', label: '道具', active: this.assignmentKind === 'prop' },
+      { kind: 'cast', label: '演员', active: this.assignmentKind === 'cast' },
+    ];
+  }
+
+  get assignmentSelectLabel(): string {
+    if (this.assignmentKind === 'owner') return '选择负责人';
+    return this.assignmentKind === 'prop' ? '选择道具' : '选择演员';
+  }
+
+  get assignmentEmptyCopy(): string {
+    if (this.assignmentKind === 'owner') return '暂无负责人记录。';
+    return this.assignmentKind === 'prop' ? '暂无道具记录。' : '暂无演员记录。';
+  }
+
+  get isOwnerAssignment(): boolean {
+    return this.assignmentKind === 'owner';
+  }
+
+  get assignmentOptions(): string[] {
+    const values = new Set<string>();
+    if (this.assignmentKind === 'owner') {
+      OWNERS.filter((name) => name !== '待指定').forEach((name) =>
+        values.add(name),
+      );
+      this.allCues.forEach(({ cue: item }) => {
+        if (item.owner) values.add(item.owner);
+      });
+    } else {
+      const key = this.assignmentKind === 'prop' ? 'props' : 'cast';
+      this.allCues.forEach(({ cue: item }) =>
+        item[key].forEach((value) => values.add(value)),
+      );
+    }
+    return [...values];
+  }
+
+  get activeAssignmentKey(): string {
+    const options = this.assignmentOptions;
+    return options.includes(this.assignmentKey)
+      ? this.assignmentKey
+      : (options[0] ?? '');
+  }
+
+  get assignmentEntries(): AssignmentEntry[] {
+    const key = this.activeAssignmentKey;
+    if (!key) return [];
+    return this.allCues
+      .filter(({ cue: item }) => {
+        if (this.assignmentKind === 'owner') return item.owner === key;
+        return this.assignmentKind === 'prop'
+          ? item.props.includes(key)
+          : item.cast.includes(key);
+      })
+      .map(({ cue: item, scene }) => {
+        const start = startSeconds(scene.startTime) + item.offset;
+        return { cue: item, scene, start, end: start + item.duration };
+      })
+      .sort((left, right) => left.start - right.start || left.end - right.end);
+  }
+
+  get assignmentRows() {
+    const entries = this.assignmentEntries;
+    return entries.map((entry, index) => {
+      const previous = entries[index - 1];
+      const gap = previous ? entry.start - previous.end : null;
+      let interval: string;
+      if (gap === null) interval = '首条提示';
+      else if (gap > 0) interval = `距上一条 ${gapLabel(gap)}`;
+      else if (gap === 0) interval = '紧接上一条';
+      else interval = `与上一条重叠 ${gapLabel(-gap)}`;
+      return {
+        id: `assignment-${entry.cue.id}`,
+        sceneId: entry.scene.id,
+        cueId: entry.cue.id,
+        sceneLabel: `${entry.scene.act} ${entry.scene.name}`,
+        title: entry.cue.title,
+        kind: entry.cue.kind,
+        start: timeLabel(entry.scene, entry.cue.offset),
+        end: timeLabel(entry.scene, entry.cue.offset + entry.cue.duration),
+        interval,
+        overlapPrevious: gap !== null && gap < 0,
+      };
+    });
+  }
+
+  get assignmentOverlaps(): Array<{
+    id: string;
+    seconds: number;
+    detail: string;
+  }> {
+    const entries = this.assignmentEntries;
+    const result: Array<{ id: string; seconds: number; detail: string }> = [];
+    for (let index = 0; index < entries.length; index += 1) {
+      const current = entries[index]!;
+      for (let next = index + 1; next < entries.length; next += 1) {
+        const other = entries[next]!;
+        if (other.start >= current.end) break;
+        const seconds = Math.min(current.end, other.end) - other.start;
+        result.push({
+          id: `assignment-overlap-${current.cue.id}-${other.cue.id}`,
+          seconds,
+          detail: `「${current.cue.title}」（${current.scene.act} ${current.scene.name}）与「${other.cue.title}」（${other.scene.act} ${other.scene.name}）时间重叠 ${seconds} 秒`,
+        });
+      }
+    }
+    return result;
+  }
+
+  get unassignedCues(): Array<{ id: string; label: string }> {
+    return this.allCues
+      .filter(({ cue: item }) => !item.owner)
+      .map(({ cue: item, scene }) => ({
+        id: `unassigned-${item.id}`,
+        label: `${scene.act} ${scene.name}「${item.title}」`,
+      }));
   }
 
   @action
@@ -502,6 +650,23 @@ export default class CueEditorComponent extends Component {
   @action
   setSearch(value: string): void {
     this.search = value;
+  }
+
+  @action
+  setAssignmentKind(kind: AssignmentKind): void {
+    this.assignmentKind = kind;
+  }
+
+  @action
+  selectAssignment(value: string): void {
+    this.assignmentKey = value;
+  }
+
+  @action
+  inspectAssignmentCue(sceneId: string, cueId: string): void {
+    this.activeSceneId = sceneId;
+    this.selectedCueId = cueId;
+    this.draft = null;
   }
 
   @action

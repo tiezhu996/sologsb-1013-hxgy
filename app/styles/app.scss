@@ -657,6 +657,169 @@ kbd {
   overflow: hidden;
 }
 
+.assignment-total {
+  min-width: 24px;
+  padding: 3px 7px;
+  border-radius: 99px;
+  text-align: center;
+  color: #2d5a75;
+  background: #e6f0f6;
+  font-size: 10px;
+}
+
+.assignment-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  padding: 10px 12px 0;
+}
+
+.assignment-tab {
+  padding: 6px 0;
+  border: 1px solid #dbe2e8;
+  border-radius: 7px;
+  color: #5d6c79;
+  background: #f6f8f9;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.assignment-tab.is-active {
+  border-color: #4d8aaf;
+  color: #1f5d88;
+  background: #e9f2f8;
+  font-weight: 700;
+}
+
+.assignment-select {
+  display: block;
+  margin: 6px 12px 0;
+}
+
+.assignment-list {
+  padding: 7px;
+  display: grid;
+  gap: 5px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.assignment-row {
+  width: 100%;
+  padding: 8px 9px;
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  border: 0;
+  border-left: 3px solid #8494a2;
+  border-radius: 8px;
+  color: var(--ink);
+  background: #f7f9fa;
+  cursor: pointer;
+}
+
+.assignment-row:hover {
+  background: #edf4f7;
+}
+
+.assignment-row.has-overlap {
+  border-left-color: var(--red);
+  background: #fdf3f4;
+}
+
+.assignment-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assignment-row-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.assignment-scene {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.assignment-kind {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: #506473;
+  background: #e8edf1;
+  font-size: 9px;
+}
+
+.assignment-row-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assignment-time {
+  color: #4e5f6e;
+  font: 600 10px Consolas, monospace;
+}
+
+.assignment-row-meta small {
+  color: #8b97a2;
+  font-size: 9px;
+}
+
+.assignment-row.has-overlap .assignment-row-meta small {
+  color: #a03a44;
+  font-weight: 700;
+}
+
+.assignment-overlaps {
+  margin: 0 8px 8px;
+  display: grid;
+  gap: 5px;
+}
+
+.assignment-overlap-item {
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px;
+  align-items: start;
+  border-radius: 8px;
+  color: #8e3038;
+  background: #fceff0;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.overlap-icon {
+  text-align: center;
+}
+
+.assignment-unassigned {
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+  border: 1px dashed #d9a0a6;
+  border-radius: 8px;
+  color: #8e3038;
+  background: #fdf6f6;
+  font-size: 10px;
+}
+
+.assignment-unassigned small {
+  color: #a5636a;
+  font-size: 9px;
+}
+
+
 .version-select {
   display: block;
   margin: 10px 12px 2px;
