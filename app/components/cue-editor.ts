@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import type { Cue, CueDraft, CueIssue, CueKind, Scene, ShowData, VersionDiff, VersionSnapshot } from 'stage-cue-editor/models/show';
+import type { Cue, CueDraft, CueIssue, CueKind, RosterClash, RosterEntry, RosterMode, Scene, ShowData, VersionDiff, VersionSnapshot } from 'stage-cue-editor/models/show';
 import { CUE_KINDS, OWNERS } from 'stage-cue-editor/models/show';
 
 const STORAGE_KEY = 'sologsb-1013-stage-cue-editor-v1';
@@ -47,11 +47,11 @@ function initialShow(): ShowData {
       act: '第一幕',
       name: 'S2',
       title: '宫门夜宴',
-      startTime: '19:40',
+      startTime: '19:31',
       locked: false,
       cues: [
         cue('cue-stage-2', '舞台', '中景屏风换为朱红', 60, '', { notes: '负责人尚未确认' }),
-        cue('cue-actor-2', '演员', '群臣列队入场', 110, '赵一帆', { cast: ['群演 6 人', '侍女 4 人'], props: ['宫灯'] }),
+        cue('cue-actor-2', '演员', '群臣列队入场', 110, '赵一帆', { cast: ['群演 6 人', '侍女 4 人'], props: ['宫灯', '折扇'] }),
         cue('cue-light-2', '灯光', '暖金顶光覆盖后区', 80, '李岚', { lighting: '顶光 4、5 号 70%，色温 3200K' }),
       ],
     },
@@ -101,11 +101,21 @@ function startSeconds(value: string): number {
 }
 
 function timeLabel(scene: Scene, offset: number): string {
-  const total = startSeconds(scene.startTime) + offset;
-  const hour = Math.floor((total % 86400) / 3600);
+  return clockLabel(startSeconds(scene.startTime) + offset);
+}
+
+function clockLabel(total: number): string {
+  const hour = Math.floor(((total % 86400) + 86400) % 86400 / 3600);
   const minute = Math.floor((total % 3600) / 60);
   const second = total % 60;
   return [hour, minute, second].map((part) => String(part).padStart(2, '0')).join(':');
+}
+
+const UNASSIGNED = '待指定';
+
+function isUnassigned(owner: string): boolean {
+  const value = owner.trim();
+  return !value || value === UNASSIGNED;
 }
 
 function overlaps(aStart: number, aDuration: number, bStart: number, bDuration: number): boolean {
@@ -121,6 +131,10 @@ export default class CueEditorComponent extends Component {
   @tracked compareVersionId = '';
   @tracked message = '';
   @tracked search = '';
+  @tracked rosterMode: RosterMode = 'owner';
+  @tracked rosterOwner = '';
+  @tracked rosterProp = '';
+  @tracked rosterCast = '';
 
   private undoStack: ShowData[] = [];
   private redoStack: ShowData[] = [];
@@ -175,11 +189,150 @@ export default class CueEditorComponent extends Component {
     return this.show.scenes.flatMap((scene) => scene.cues.map((item) => ({ cue: item, scene })));
   }
 
+  get rosterModeTabs(): Array<{ mode: RosterMode; label: string }> {
+    return [
+      { mode: 'owner', label: '负责人' },
+      { mode: 'props', label: '道具' },
+      { mode: 'cast', label: '演员' },
+    ];
+  }
+
+  get timelineEntries(): RosterEntry[] {
+    return this.allCues
+      .map(({ cue, scene }) => ({
+        cueId: cue.id,
+        sceneId: scene.id,
+        sceneLabel: `${scene.act} ${scene.name}`,
+        title: cue.title,
+        kind: cue.kind,
+        start: startSeconds(scene.startTime) + cue.offset,
+        end: startSeconds(scene.startTime) + cue.offset + cue.duration,
+        duration: cue.duration,
+      }))
+      .sort((a, b) => a.start - b.start || a.cueId.localeCompare(b.cueId));
+  }
+
+  get rosterOwnerOptions(): string[] {
+    const names = OWNERS.filter((name) => name !== UNASSIGNED);
+    const extra = new Set<string>();
+    this.allCues.forEach(({ cue }) => {
+      const name = cue.owner.trim();
+      if (!isUnassigned(cue.owner) && !names.includes(name)) extra.add(name);
+    });
+    return [...names, ...Array.from(extra), UNASSIGNED];
+  }
+
+  get rosterPropsOptions(): string[] {
+    return this.uniqueMembers((cue) => cue.props);
+  }
+
+  get rosterCastOptions(): string[] {
+    return this.uniqueMembers((cue) => cue.cast);
+  }
+
+  get rosterOptions(): string[] {
+    if (this.rosterMode === 'props') return this.rosterPropsOptions;
+    if (this.rosterMode === 'cast') return this.rosterCastOptions;
+    return this.rosterOwnerOptions;
+  }
+
+  get rosterTarget(): string {
+    const current = this.rosterMode === 'owner' ? this.rosterOwner : this.rosterMode === 'props' ? this.rosterProp : this.rosterCast;
+    return current && this.rosterOptions.includes(current) ? current : this.rosterOptions[0] ?? '';
+  }
+
+  get rosterTargetLabel(): string {
+    return this.rosterMode === 'owner' && this.rosterTarget === UNASSIGNED ? '待指定（空缺）' : this.rosterTarget;
+  }
+
+  get rosterIsUnassigned(): boolean {
+    return this.rosterMode === 'owner' && this.rosterTarget === UNASSIGNED;
+  }
+
+  get rosterEntries(): RosterEntry[] {
+    const target = this.rosterTarget;
+    if (!target) return [];
+    const selected = new Set<string>();
+    this.allCues.forEach(({ cue }) => {
+      const match =
+        this.rosterMode === 'owner'
+          ? this.rosterTarget === UNASSIGNED
+            ? isUnassigned(cue.owner)
+            : cue.owner.trim() === target
+          : (this.rosterMode === 'props' ? cue.props : cue.cast).some((value) => value.trim() === target);
+      if (match) selected.add(cue.id);
+    });
+    return this.timelineEntries.filter((entry) => selected.has(entry.cueId));
+  }
+
+  get rosterRows() {
+    return this.rosterEntries.map((entry, index, entries) => {
+      const previous = entries[index - 1];
+      const gap = previous ? entry.start - previous.end : null;
+      return {
+        ...entry,
+        startLabel: clockLabel(entry.start),
+        endLabel: clockLabel(entry.end),
+        gapLabel: gap === null ? '本清单第一条' : gap >= 0 ? `距上一条间隔 ${gap} 秒` : `与上一条重叠 ${-gap} 秒`,
+        clash: gap !== null && gap < 0,
+        selected: entry.cueId === this.selectedCueId,
+      };
+    });
+  }
+
+  get rosterClashes(): RosterClash[] {
+    const entries = this.rosterEntries;
+    const clashes: RosterClash[] = [];
+    for (let index = 0; index < entries.length; index += 1) {
+      for (let next = index + 1; next < entries.length; next += 1) {
+        const left = entries[index]!;
+        const right = entries[next]!;
+        if (left.end <= right.start || right.end <= left.start) continue;
+        clashes.push({
+          id: `${left.cueId}-${right.cueId}`,
+          overlap: Math.min(left.end, right.end) - Math.max(left.start, right.start),
+          left,
+          right,
+        });
+      }
+    }
+    return clashes.sort((a, b) => b.overlap - a.overlap);
+  }
+
+  get rosterClashRows() {
+    return this.rosterClashes.map((clash) => ({
+      id: clash.id,
+      overlap: clash.overlap,
+      leftCueId: clash.left.cueId,
+      rightCueId: clash.right.cueId,
+      leftScene: clash.left.sceneLabel,
+      rightScene: clash.right.sceneLabel,
+      leftTitle: clash.left.title,
+      rightTitle: clash.right.title,
+      leftRange: `${clockLabel(clash.left.start)}–${clockLabel(clash.left.end)}`,
+      rightRange: `${clockLabel(clash.right.start)}–${clockLabel(clash.right.end)}`,
+    }));
+  }
+
+  get unassignedCount(): number {
+    return this.allCues.filter(({ cue }) => isUnassigned(cue.owner)).length;
+  }
+
+  private uniqueMembers(pick: (cue: Cue) => string[]): string[] {
+    const ordered: string[] = [];
+    this.allCues.forEach(({ cue }) => {
+      pick(cue).forEach((value) => {
+        const name = value.trim();
+        if (name && !ordered.includes(name)) ordered.push(name);
+      });
+    });
+    return ordered;
+  }
+
   get issues(): CueIssue[] {
     const issues: CueIssue[] = [];
     this.allCues.forEach(({ cue: item, scene }) => {
-      const cueStart = startSeconds(scene.startTime) + item.offset;
-      if (!item.owner) {
+      if (isUnassigned(item.owner)) {
         issues.push({ id: `owner-${item.id}`, severity: 'error', title: '负责人空缺', detail: `${scene.act} ${scene.name}「${item.title}」尚未指定负责人。`, sceneId: scene.id, cueId: item.id });
       }
       item.dependsOn.forEach((reference) => {
@@ -502,6 +655,27 @@ export default class CueEditorComponent extends Component {
   @action
   setSearch(value: string): void {
     this.search = value;
+  }
+
+  @action
+  setRosterMode(mode: RosterMode): void {
+    this.rosterMode = mode;
+  }
+
+  @action
+  setRosterTarget(value: string): void {
+    if (this.rosterMode === 'owner') this.rosterOwner = value;
+    else if (this.rosterMode === 'props') this.rosterProp = value;
+    else this.rosterCast = value;
+  }
+
+  @action
+  focusRosterCue(cueId: string): void {
+    const found = this.allCues.find((entry) => entry.cue.id === cueId);
+    if (!found) return;
+    if (found.scene.id !== this.activeSceneId) this.activeSceneId = found.scene.id;
+    this.selectedCueId = found.cue.id;
+    this.draft = null;
   }
 
   @action

@@ -72,5 +72,25 @@ export interface VersionDiff {
   after: string;
 }
 
+export type RosterMode = 'owner' | 'props' | 'cast';
+
+export interface RosterEntry {
+  cueId: string;
+  sceneId: string;
+  sceneLabel: string;
+  title: string;
+  kind: CueKind;
+  start: number;
+  end: number;
+  duration: number;
+}
+
+export interface RosterClash {
+  id: string;
+  overlap: number;
+  left: RosterEntry;
+  right: RosterEntry;
+}
+
 export const CUE_KINDS: CueKind[] = ['灯光', '音响', '道具', '演员', '舞台', '字幕'];
 export const OWNERS = ['李岚', '周启', '陈默', '赵一帆', '孙禾', '待指定'];

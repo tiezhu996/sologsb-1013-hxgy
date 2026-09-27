@@ -197,6 +197,56 @@
         </div>
       </section>
 
+      <section class="roster-panel paper-surface">
+        <div class="panel-heading">
+          <div><small>ASSIGNMENT CHECK</small><h2>分工核对</h2></div>
+          <span class="issue-count roster-count">{{this.rosterRows.length}}</span>
+        </div>
+        <div class="roster-tabs">
+          {{#each this.rosterModeTabs as |tab|}}
+            <button type="button" class="roster-tab {{if (eq tab.mode this.rosterMode) "is-active"}}" {{on "click" (fn this.setRosterMode tab.mode)}}>{{tab.label}}</button>
+          {{/each}}
+        </div>
+        <PaperSelect @label="选择负责人 / 道具 / 演员" @options={{this.rosterOptions}} @selected={{this.rosterTarget}} @onChange={{this.setRosterTarget}} class="roster-select" />
+        {{#if this.rosterIsUnassigned}}
+          <p class="roster-vacancy">当前共 {{this.unassignedCount}} 条提示未指定负责人，请尽快分配。</p>
+        {{/if}}
+        {{#if this.rosterRows.length}}
+          <ol class="roster-list">
+            {{#each this.rosterRows as |row|}}
+              <li class="roster-row-item">
+                <button type="button" class="roster-row {{if row.clash "is-clash"}} {{if row.selected "is-selected"}}" {{on "click" (fn this.focusRosterCue row.cueId)}}>
+                  <div class="roster-row-head">
+                    <strong>{{row.startLabel}}</strong>
+                    <span class="roster-scene">{{row.sceneLabel}}</span>
+                  </div>
+                  <div class="roster-row-title">
+                    <span class="cue-kind">{{row.kind}}</span>
+                    <span>{{row.title}}</span>
+                  </div>
+                  <small>至 {{row.endLabel}} · {{row.duration}} 秒</small>
+                  <small class="roster-gap">{{row.gapLabel}}</small>
+                </button>
+              </li>
+            {{/each}}
+          </ol>
+        {{else}}
+          <p class="empty-copy">没有与「{{this.rosterTargetLabel}}」相关的提示。</p>
+        {{/if}}
+        {{#if this.rosterClashRows.length}}
+          <div class="roster-clashes">
+            <h4>时间重叠 · {{this.rosterClashRows.length}} 对</h4>
+            {{#each this.rosterClashRows as |clash|}}
+              <button type="button" class="roster-clash" {{on "click" (fn this.focusRosterCue clash.rightCueId)}}>
+                <strong>重叠 {{clash.overlap}} 秒</strong>
+                <span><em>{{clash.leftScene}}</em>{{clash.leftTitle}}（{{clash.leftRange}}）</span>
+                <span><em>{{clash.rightScene}}</em>{{clash.rightTitle}}（{{clash.rightRange}}）</span>
+              </button>
+            {{/each}}
+          </div>
+        {{/if}}
+      </section>
+
       <section class="version-panel paper-surface">
         <div class="panel-heading"><div><small>LOCKED VERSIONS</small><h2>版本比较</h2></div></div>
         {{#if this.versions.length}}
